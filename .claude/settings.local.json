@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew tasks:*)",
+      "Bash(grep:*)",
+      "Bash(./gradlew TeamCode:build:*)",
+      "Bash(/usr/libexec/java_home -V)",
+      "Bash(/usr/libexec/java_home:*)",
+      "Bash(java -version:*)"
+    ]
+  }
+}
