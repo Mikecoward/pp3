@@ -114,9 +114,10 @@ public abstract class BaseCatBotTeleop extends OpMode {
     protected boolean dpadDownPressed = false;
 
     // Lifter current limiting
-    private static final double LIFTER_BASE_POWER    = 1.0;
-    private static final double LIFTER_STEP_DOWN     = 0.05;   // power reduction per loop when overcurrent
-    private static final double LIFTER_STEP_UP       = 0.005;  // power recovery per loop when clear
+    private static final double LIFTER_BASE_POWER         = 1.0;
+    private static final double LIFTER_CURRENT_LIMIT_AMPS = 1.0;
+    private static final double LIFTER_KP_DOWN            = 0.1;   // scale reduction per amp of overcurrent per loop
+    private static final double LIFTER_KP_UP              = 0.01;  // scale recovery per amp of headroom per loop
     private double lifterPowerScale = 1.0;
 
 
@@ -313,11 +314,13 @@ public abstract class BaseCatBotTeleop extends OpMode {
             lifter.setTargetPosition(lifterTargetPosition);
         }
 
-        if (lifter.isOverCurrent()) {
-            lifterPowerScale -= LIFTER_STEP_DOWN;
+        double lifterCurrentA = lifter.getCurrent(CurrentUnit.AMPS);
+        double currentError = lifterCurrentA - LIFTER_CURRENT_LIMIT_AMPS;
+        if (currentError > 0) {
+            lifterPowerScale -= currentError * LIFTER_KP_DOWN;
             telemetry.addLine("*** LIFTER CURRENT LIMIT ***");
         } else {
-            lifterPowerScale += LIFTER_STEP_UP;
+            lifterPowerScale += (-currentError) * LIFTER_KP_UP;
         }
         lifterPowerScale = clamp(lifterPowerScale, 0.0, 1.0);
         lifter.setPower(LIFTER_BASE_POWER * lifterPowerScale);
@@ -329,7 +332,7 @@ public abstract class BaseCatBotTeleop extends OpMode {
         telemetry.addData("Catstrength", "%.2f", catstrengthPosition);
         telemetry.addData("Lifter Encoder", lifter.getCurrentPosition());
         telemetry.addData("Lifter Target", lifterTargetPosition);
-        telemetry.addData("Lifter Current (mA)", lifter.getCurrent(CurrentUnit.MILLIAMPS));
+        telemetry.addData("Lifter Current (mA)", lifterCurrentA * 1000);
         //telemetryM.debug("position", follower.getPose());
         //telemetryM.debug("velocity", follower.getVelocity());
         //telemetryM.debug("automatedDrive", automatedDrive);
