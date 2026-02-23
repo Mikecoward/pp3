@@ -104,16 +104,18 @@ The robot uses [Pedro Pathing](https://pedropathing.com) for autonomous path fol
 ### Hardware Configuration
 
 **Motors** (all DcMotorEx):
-- Drive: `lf`, `rf`, `lb`, `rb` (mecanum wheels)
-- Slides: `ls` (left slide), `rs` (right slide)
-- Intake: `im` (intake motor)
-- Catapult: `cp` (catapult motor)
+- Drive: `lf`, `rf`, `lb`, `rb` (mecanum wheels, configured via Pedro Pathing Constants)
+- Intake: `intake` (FORWARD direction, BRAKE)
+- Catapult: `rcat` (REVERSE) and `lcat` (FORWARD) — two motors driven together
+- Lifter: `lifter` (FORWARD, BRAKE, RUN_TO_POSITION mode)
+  - Encoder range: `upperlimit = 0`, `lowerlimit = -1280`
+  - Base power: `LIFTER_BASE_POWER = 1.0`
+  - Current limit: 1.0 A via `setCurrentAlert(1.0, CurrentUnit.AMPS)`
+  - Power scale algorithm: on overcurrent subtract `STEP_DOWN=0.05`, else add `STEP_UP=0.005`, clamped [0,1]
+  - Applied each loop as `lifter.setPower(LIFTER_BASE_POWER * lifterPowerScale)`
 
 **Servos**:
-- `claw`: Specimen claw
-- `wrist`: Wrist joint
-- `arm`: Arm position
-- `bucket`: Sample bucket
+- `catstrength`: Catapult strength adjustment (range 0.25–0.75, default 0.75)
 
 **Sensors**:
 - `odo`: goBILDA Pinpoint odometry (I2C)
@@ -172,3 +174,13 @@ Uses Gradle wrapper (`./gradlew`). Build configuration split across:
 - Uses `@Configurable` annotation from bylazar.configurables for runtime tuning
 - Telemetry uses PanelsTelemetry for structured output
 - Game timer accessed via `getRuntime()` for scheduling actions
+
+### DcMotorEx Current Limiting Pattern
+The FTC SDK exposes current limiting via the Control Hub's alert threshold, but **does not cut power automatically** — your code must respond to the flag:
+- `motor.setCurrentAlert(amps, CurrentUnit.AMPS)` — set once in `init()`, programs threshold into hub firmware
+- `motor.isOverCurrent()` — **cheap** (included in bulk data read), poll every loop
+- `motor.getCurrent(CurrentUnit.MILLIAMPS)` — **expensive** (dedicated I2C round-trip), use only for telemetry display
+
+### Gamepad Assignments (Teleop)
+- **Gamepad 1**: Drive (right stick), turn (left stick), intake (left bumper/trigger), catapult shoot (right bumper), mode toggles (start), LL pose set (back), fine lifter adjust (dpad left/right), catstrength (dpad up/down)
+- **Gamepad 2**: Lifter coarse moves (dpad right = down 1200 ticks, dpad left = up 1200 ticks)

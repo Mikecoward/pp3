@@ -113,6 +113,12 @@ public abstract class BaseCatBotTeleop extends OpMode {
     protected boolean dpadUpPressed = false;
     protected boolean dpadDownPressed = false;
 
+    // Lifter current limiting
+    private static final double LIFTER_BASE_POWER    = 1.0;
+    private static final double LIFTER_STEP_DOWN     = 0.05;   // power reduction per loop when overcurrent
+    private static final double LIFTER_STEP_UP       = 0.005;  // power recovery per loop when clear
+    private double lifterPowerScale = 1.0;
+
 
     @Override
     public void init() {
@@ -179,7 +185,8 @@ public abstract class BaseCatBotTeleop extends OpMode {
         lifter.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         lifter.setTargetPosition(0);
         lifter.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-        lifter.setPower(0.7);}
+        lifter.setCurrentAlert(1.0, CurrentUnit.AMPS);
+        lifter.setPower(LIFTER_BASE_POWER);}
 
     @Override
     public void start() {
@@ -281,26 +288,39 @@ public abstract class BaseCatBotTeleop extends OpMode {
             }
 
             // DPad Right - Increase lifter position
-            if (gamepad1.dpad_right) {
+            if (gamepad2.dpad_right) {
                 lifterTargetPosition -= 1200;
                 ///lifterTargetPosition = upperlimit;
             }
 
-            if (gamepad1.dpad_left) {
+            if (gamepad2.dpad_left) {
                 lifterTargetPosition += 1200;
                 ///lifterTargetPosition = lowerlimit;
             }
 
-            if (gamepad2.dpad_left) {
+            if (gamepad1.dpad_left) {
                 lowerlimit += LIFTER_INCREMENT_TICKS;
                 upperlimit += LIFTER_INCREMENT_TICKS;
                 lifterTargetPosition += LIFTER_INCREMENT_TICKS;
-
+            }
+            if (gamepad1.dpad_right) {
+                lowerlimit -= LIFTER_INCREMENT_TICKS;
+                upperlimit -= LIFTER_INCREMENT_TICKS;
+                lifterTargetPosition -= LIFTER_INCREMENT_TICKS;
             }
             lifterTargetPosition = Math.max(lifterTargetPosition,  lowerlimit);
             lifterTargetPosition = Math.min(lifterTargetPosition,  upperlimit);
             lifter.setTargetPosition(lifterTargetPosition);
         }
+
+        if (lifter.isOverCurrent()) {
+            lifterPowerScale -= LIFTER_STEP_DOWN;
+            telemetry.addLine("*** LIFTER CURRENT LIMIT ***");
+        } else {
+            lifterPowerScale += LIFTER_STEP_UP;
+        }
+        lifterPowerScale = clamp(lifterPowerScale, 0.0, 1.0);
+        lifter.setPower(LIFTER_BASE_POWER * lifterPowerScale);
 
         Pose odomPose = follower.getPose();
         telemetry.addData("PP X/Y/H", "%4.2f, %4.2f, %4.1f°",
@@ -309,8 +329,7 @@ public abstract class BaseCatBotTeleop extends OpMode {
         telemetry.addData("Catstrength", "%.2f", catstrengthPosition);
         telemetry.addData("Lifter Encoder", lifter.getCurrentPosition());
         telemetry.addData("Lifter Target", lifterTargetPosition);
-        telemetry.addData("Lifter Current (mA)",
-                lifter.getCurrent(CurrentUnit.MILLIAMPS));
+        telemetry.addData("Lifter Current (mA)", lifter.getCurrent(CurrentUnit.MILLIAMPS));
         //telemetryM.debug("position", follower.getPose());
         //telemetryM.debug("velocity", follower.getVelocity());
         //telemetryM.debug("automatedDrive", automatedDrive);
