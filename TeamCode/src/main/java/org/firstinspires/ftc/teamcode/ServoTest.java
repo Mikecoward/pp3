@@ -7,7 +7,7 @@ import com.qualcomm.robotcore.hardware.Servo;
 @TeleOp(name = "Servo Test", group = "Testing")
 public class ServoTest extends LinearOpMode {
     private Servo catstrength;
-    private double servoPosition = 0.75;
+    private double servoPosition = 0.5;
 
     private static final double MIN_POSITION = 0.2;
     private static final double MAX_POSITION = 0.75;
