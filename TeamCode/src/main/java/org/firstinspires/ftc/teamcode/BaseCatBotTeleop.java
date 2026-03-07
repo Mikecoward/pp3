@@ -74,6 +74,9 @@ public abstract class BaseCatBotTeleop extends BaseCatBot {
     protected boolean dpadDownPressed = false;
     protected boolean guidePressed    = false;
 
+    // SRSHub / lidar
+    protected SRSHub srsHub = null;
+
     @Override
     public void init() {
         // Build alliance-specific pose array
@@ -102,6 +105,17 @@ public abstract class BaseCatBotTeleop extends BaseCatBot {
         }
 
         initHardware();
+
+        // SRSHub init (blocks ~2.5 s while sensors boot)
+        try {
+            SRSHub.Config hubConfig = new SRSHub.Config();
+            hubConfig.addI2CDevice(1, new SRSHub.VL53L5CX(SRSHub.VL53L5CX.Resolution.GRID_4x4));
+            srsHub = hardwareMap.get(SRSHub.class, "srshub");
+            srsHub.init(hubConfig);
+        } catch (Exception e) {
+            telemetry.addData("SRSHub init error", e.getMessage());
+            srsHub = null;
+        }
 
         // Lifter-specific setup (beyond direction/brake set in initHardware)
         if (!PoseStorage.lifterCalibrated) {
@@ -177,8 +191,14 @@ public abstract class BaseCatBotTeleop extends BaseCatBot {
             shootCatapult();
         }
 
-        boolean lifterDown = lifter.getCurrentPosition() < 20;
-        if (!lifterDown) {
+        boolean lifterDown     = lifter.getCurrentPosition() < 20;
+        boolean lifterGoingUp  = lifterTargetPosition == upperlimit;
+        boolean lifterNearTop  = lifter.getCurrentPosition() >= upperlimit - 30;
+
+        if (lifterGoingUp && !lifterNearTop) {
+            // Lifter heading up but not yet near the top — funnel game pieces with half-speed intake
+            intake.setPower(INTAKE_IN_POWER * 0.5);
+        } else if (!lifterDown) {
             intake.setPower(INTAKE_OFF_POWER);
         } else if (gamepad1.left_bumper) {
             intakeOut();
@@ -243,6 +263,30 @@ public abstract class BaseCatBotTeleop extends BaseCatBot {
         telemetry.addData("Lifter Target", lifterTargetPosition);
         telemetry.addData("Lifter Upper Limit", upperlimit);
         telemetry.addData("Lifter Current (mA)", lifterCurrentA * 1000);
+
+        // SRSHub distance grids
+        if (srsHub != null) {
+            srsHub.update();
+            if (srsHub.disconnected()) {
+                telemetry.addLine("SRSHub disconnected");
+            } else {
+                SRSHub.VL53L5CX lidar1 = srsHub.getI2CDevice(1, SRSHub.VL53L5CX.class);
+
+                telemetry.addLine("=== Sensor 1 ===");
+                if (!lidar1.disconnected) {
+                    for (int row = 0; row < 4; row++) {
+                        StringBuilder rowData = new StringBuilder();
+                        for (int col = 0; col < 4; col++) {
+                            rowData.append(String.format("%4d ", lidar1.distances[row * 4 + col]));
+                        }
+                        telemetry.addData("S1 R" + row, rowData.toString());
+                    }
+                } else {
+                    telemetry.addLine("Sensor 1 disconnected");
+                }
+            }
+        }
+
         telemetry.update();
     }
 
