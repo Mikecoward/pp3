@@ -23,8 +23,10 @@ public abstract class BaseCatBotAuto extends BaseCatBot {
     protected double INTAKE_OUT_POWER = 0.9;
 
     // ---- Path / state machine ----
-    protected int numPaths = 19;
-    protected double speedfactor = 0.20;
+    protected int numPaths = 4;
+    protected double intakeChainSpeed        = 0.5;  // speed for approach/return legs
+    protected double intakeSegmentSpeed      = 0.2;  // speed while collecting (slow)
+    protected double shootVelocityThreshold  = 1.0;  // in/s — wait for robot to settle before shooting
     protected PathChain[] pathChains;
 
     protected ActionScheduler scheduler = new ActionScheduler();
@@ -45,8 +47,8 @@ public abstract class BaseCatBotAuto extends BaseCatBot {
 
     // BLUE "source of truth"
     protected static final Pose[] poseArrayBlue = {
-            new Pose(24.8, 134.2, Math.toRadians(144)),   // 0 Blue Start Pose
-            new Pose(32.3, 117.9 , Math.toRadians(144)),  // 1 Blue Scoring Pose
+            new Pose(23.9, 132.56, Math.toRadians(144)),   // 0 Blue Start Pose
+            new Pose(29.4, 121.8 , Math.toRadians(144)),  // 1 Blue Scoring Pose
             new Pose(40,   34,    Math.toRadians(-131)),  // 2 Blue Parking Pose
             new Pose(24,   100,    Math.toRadians(90)),    // 3 Blue intake A start
             new Pose(24,   90,    Math.toRadians(90)),    // 4 Blue intake A end
@@ -124,6 +126,7 @@ public abstract class BaseCatBotAuto extends BaseCatBot {
     public void start() {
 //        catapultDown();
 //        scheduler.atSec(getRuntime() + 0.25, this::catapultHold);
+
         try {
             String ts = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
             debugLog = new BufferedWriter(new FileWriter(LOG_DIR + "autoDebug_" + ts + ".csv"));
@@ -169,104 +172,55 @@ public abstract class BaseCatBotAuto extends BaseCatBot {
 
         int prevState = state;
         switch (state) {
-            case 0:
+            case 0: // Start -> Scoring
                 follower.followPath(pathChains[0], true);
                 state = 1;
                 break;
 
-            case 1:
-                if (!follower.isBusy()) {
-                    shootCatapultnew();
-                    scheduler.atSec(getRuntime() + 0.5, this::setstate2);
+            case 1: // Arrived at scoring - wait for settle, then shoot
+                if (!follower.isBusy() && follower.getVelocity().getMagnitude() < shootVelocityThreshold) {
+                    //shootCatapultnew();
+                    scheduler.atSec(getRuntime() + 1.5, this::shootCatapultnew);
+                    scheduler.atSec(getRuntime() + 2.5, this::setstate2);
                     state = 100;
                 }
                 break;
 
-            case 2: // Scoring -> A start
-                follower.followPath(pathChains[1], true);
+            case 2: // Intake A: Scoring -> A_Start -> A_End -> Scoring
+                follower.followPath(pathChains[1], intakeChainSpeed, true);
                 state = 3;
                 break;
-            case 3: // A Start -> A End
-                if (!follower.isBusy()) {
-                    intakeIn();
-                    follower.followPath(pathChains[2], speedfactor, true);
-                    state = 4;
+
+            case 3: // Arrived at scoring after A - wait for settle, then shoot
+                if (!follower.isBusy() && follower.getVelocity().getMagnitude() < shootVelocityThreshold) {
+                    shootCatapultnew();
+                    scheduler.atSec(getRuntime() + 0.5, this::setstate4);
+                    state = 100;
                 }
                 break;
 
-            case 4: // A End -> Scoring
-                if (!follower.isBusy()) {
-                    lifterUp();
-                    scheduler.atSec(getRuntime() + 2, this::intakeOff);
-                    follower.followPath(pathChains[3], true);
-                    state = 5;
-                }
+            case 4: // Intake B: Scoring -> B_Start -> B_End -> Scoring
+                follower.followPath(pathChains[2], intakeChainSpeed, true);
+                state = 5;
                 break;
 
-            case 5: // Shoot
-                if (!follower.isBusy()) {
+            case 5: // Arrived at scoring after B - wait for settle, then shoot
+                if (!follower.isBusy() && follower.getVelocity().getMagnitude() < shootVelocityThreshold) {
                     shootCatapultnew();
                     scheduler.atSec(getRuntime() + 0.5, this::setstate6);
                     state = 100;
                 }
                 break;
 
-            case 6: // Scoring -> B Start
-                follower.followPath(pathChains[4], true);
+            case 6: // Intake C: Scoring -> C_Start -> C_End -> Scoring
+                follower.followPath(pathChains[3], intakeChainSpeed, true);
                 state = 7;
                 break;
 
-            case 7: // B Start -> B End
-                if (!follower.isBusy()) {
-                    intakeIn();
-                    follower.followPath(pathChains[5], speedfactor, true);
-                    state = 8;
-                }
-                break;
-
-            case 8: // B End -> Scoring
-                if (!follower.isBusy()) {
-                    lifterUp();
-                    scheduler.atSec(getRuntime() + 2, this::intakeOff);
-                    follower.followPath(pathChains[6], true);
-                    state = 9;
-                }
-                break;
-
-            case 9: // Shoot
-                if (!follower.isBusy()) {
+            case 7: // Arrived at scoring after C - wait for settle, then shoot
+                if (!follower.isBusy() && follower.getVelocity().getMagnitude() < shootVelocityThreshold) {
                     shootCatapultnew();
-                    scheduler.atSec(getRuntime() + 0.5, this::setstate10);
                     state = 100;
-                }
-                break;
-
-            case 10: // Scoring -> C Start
-                follower.followPath(pathChains[7], true);
-                state = 11;
-                break;
-
-            case 11: // C Start -> C End
-                if (!follower.isBusy()) {
-                    intakeIn();
-                    follower.followPath(pathChains[8], speedfactor, true);
-                    state = 12;
-                }
-                break;
-
-            case 12: // C End
-                if (!follower.isBusy()) {
-                    lifterUp();
-                    scheduler.atSec(getRuntime() + 2, this::intakeOff);
-                    follower.followPath(pathChains[15], true);
-                    state = 100;
-                }
-                break;
-
-            case 13:
-                if (!follower.isBusy()) {
-                    follower.followPath(pathChains[9], true);
-                    state = 14;
                 }
                 break;
 
@@ -285,24 +239,31 @@ public abstract class BaseCatBotAuto extends BaseCatBot {
     // ---- Catapult sequences (scheduler-based for non-blocking use in auto) ----
     protected void shootCatapult() {
         double now = getRuntime();
-        scheduler.atSec(now,       this::catapultUp);
-        scheduler.atSec(now + 0.5, this::catapultDown);
-        scheduler.atSec(now + 1.0, this::catapultHold);
+        //scheduler.atSec(now,       this::catapultUp);
+        lifterDown();
+        //catapultUp();
+        scheduler.atSec(now + 0.2, this::catapultUp);
+        scheduler.atSec(now + 0.8, this::catapultDown);
+        scheduler.atSec(now + 1.2, this::catapultHold);
+
     }
 
     protected void shootCatapultnew() {
+        shootCatapult();
+        /*
         double now = getRuntime();
         scheduler.atSec(now,       this::catapultUp);
         scheduler.atSec(now + 0.5, this::catapultHold);
         scheduler.atSec(now + 1.5, this::catapultDown);
         scheduler.atSec(now + 2.0, this::catapultHold);
         scheduler.atSec(now + 2.1, this::lifterDown);
+         */
     }
 
     // ---- State setters (used as scheduler callbacks) ----
-    protected void setstate2()  { state = 2; }
-    protected void setstate6()  { state = 6; }
-    protected void setstate10() { state = 10; }
+    protected void setstate2() { state = 2; }
+    protected void setstate4() { state = 4; }
+    protected void setstate6() { state = 6; }
 
     // ---- Debug telemetry ----
     private void addDebugTelemetry() {
@@ -349,30 +310,49 @@ public abstract class BaseCatBotAuto extends BaseCatBot {
     protected void buildPaths() {
         pathChains = new PathChain[numPaths];
 
-        pathChains[0]  = simplePathChain(AutoTarget.STARTING.idx,      AutoTarget.SCORING.idx,       0.8);
-        pathChains[1]  = simplePathChain(AutoTarget.SCORING.idx,       AutoTarget.AUTO_A_START.idx,  0.4);
-        pathChains[2]  = simplePathChain(AutoTarget.AUTO_A_START.idx,  AutoTarget.AUTO_A_END.idx,    0.8);
-        pathChains[3]  = simplePathChain(AutoTarget.AUTO_A_END.idx,    AutoTarget.SCORING.idx,       0.8);
+        // 0: Starting pose -> Scoring (robot stops here to shoot)
+        pathChains[0] = simplePathChain(AutoTarget.STARTING.idx, AutoTarget.SCORING.idx, 0.8);
 
-        pathChains[4]  = simplePathChain(AutoTarget.SCORING.idx,       AutoTarget.AUTO_B_START.idx,  0.4);
-        pathChains[5]  = simplePathChain(AutoTarget.AUTO_B_START.idx,  AutoTarget.AUTO_B_END.idx,    0.8);
-        pathChains[6]  = simplePathChain(AutoTarget.AUTO_B_END.idx,    AutoTarget.SCORING.idx,       0.8);
+        // 1: Scoring -> A_Start -> A_End -> Scoring (smooth, no stop at waypoints)
+        //    Intake turns on as robot approaches A_Start (t=0.8 on segment 0).
+        //    Lifter rises and intake schedules off as robot departs A_End (t=0.05 on segment 2).
+        pathChains[1] = intakeChain(AutoTarget.AUTO_A_START.idx, AutoTarget.AUTO_A_END.idx);
 
-        pathChains[7]  = simplePathChain(AutoTarget.SCORING.idx,       AutoTarget.AUTO_C_START.idx,  0.4);
-        pathChains[8]  = simplePathChain(AutoTarget.AUTO_C_START.idx,  AutoTarget.AUTO_C_END.idx,    0.8);
-        pathChains[9]  = simplePathChain(AutoTarget.AUTO_C_START.idx,  AutoTarget.AUTO_GATE_START.idx, 0.8);
+        // 2: Scoring -> B_Start -> B_End -> Scoring
+        pathChains[2] = intakeChain(AutoTarget.AUTO_B_START.idx, AutoTarget.AUTO_B_END.idx);
 
-        pathChains[10] = simplePathChain(AutoTarget.SCORING.idx,       AutoTarget.AUTO_LINE_SEG.idx, 0.8);
-        pathChains[11] = simplePathChain(AutoTarget.AUTO_LINE_SEG.idx, AutoTarget.AUTO_A_START.idx,  0.8);
-        pathChains[12] = simplePathChain(AutoTarget.AUTO_LINE_SEG.idx, AutoTarget.AUTO_B_START.idx,  0.8);
-        pathChains[13] = simplePathChain(AutoTarget.AUTO_LINE_SEG.idx, AutoTarget.AUTO_C_START.idx,  0.8);
+        // 3: Scoring -> C_Start -> C_End -> Scoring
+        pathChains[3] = intakeChain(AutoTarget.AUTO_C_START.idx, AutoTarget.AUTO_C_END.idx);
+    }
 
-        pathChains[14] = simplePathChain(AutoTarget.AUTO_B_END.idx,    AutoTarget.AUTO_B_START.idx,  0.8);
-        pathChains[15] = simplePathChain(AutoTarget.AUTO_C_END.idx,    AutoTarget.AUTO_GATE_START.idx, 0.8);
-        pathChains[16] = simplePathChain(AutoTarget.AUTO_A_END.idx,    AutoTarget.SCORING.idx,       0.8);
+    /** Builds a 3-segment intake PathChain: Scoring -> start -> end -> Scoring.
+     *  Callbacks handle intake on/off, lifter, and per-segment speed without stopping. */
+    private PathChain intakeChain(int startIdx, int endIdx) {
+        int s = AutoTarget.SCORING.idx;
+        return follower.pathBuilder()
+                // Segment 0: Scoring -> intake start (fast approach)
+                .addPath(new BezierLine(poseArray[s], poseArray[startIdx]))
+                .setLinearHeadingInterpolation(
+                        poseArray[s].getHeading(), poseArray[startIdx].getHeading(), 0.4)
+                .addParametricCallback(0.8, this::intakeIn)   // intake on while approaching waypoint
+                .addParametricCallback(0.9, () ->             // slow down just before intake segment
+                        follower.setMaxPowerScaling(intakeSegmentSpeed))
 
-        pathChains[17] = simplePathChain(AutoTarget.AUTO_GATE_START.idx, AutoTarget.AUTO_GATE_END.idx, 0.8);
-        pathChains[18] = simplePathChain(AutoTarget.AUTO_GATE_END.idx,   AutoTarget.SCORING.idx,       0.8);
+                // Segment 1: intake start -> intake end (slow collection)
+                .addPath(new BezierLine(poseArray[startIdx], poseArray[endIdx]))
+                .setLinearHeadingInterpolation(
+                        poseArray[startIdx].getHeading(), poseArray[endIdx].getHeading(), 0.8)
+
+                // Segment 2: intake end -> Scoring (return at full speed)
+                .addPath(new BezierLine(poseArray[endIdx], poseArray[s]))
+                .setLinearHeadingInterpolation(
+                        poseArray[endIdx].getHeading(), poseArray[s].getHeading(), 0.8)
+                .addParametricCallback(0.05, () -> {          // early in return leg:
+                    follower.setMaxPowerScaling(intakeChainSpeed); // restore speed
+                    lifterUp();                               //   raise lifter for scoring
+                    scheduler.atSec(getRuntime() + 1.5, this::intakeOff); // stop intake
+                })
+                .build();
     }
 
     protected PathChain simplePathChain(int start, int end, double headingTime) {

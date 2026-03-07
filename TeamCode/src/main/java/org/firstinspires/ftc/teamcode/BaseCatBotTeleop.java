@@ -19,7 +19,7 @@ import java.util.function.Supplier;
 public abstract class BaseCatBotTeleop extends BaseCatBot {
 
     // --- Drive ---
-    int upperlimit = 135;
+    int upperlimit = 550;
     int lowerlimit = 0;
     protected boolean automatedDrive;
     protected AutoTarget currentAutoTarget = AutoTarget.NONE;
@@ -29,11 +29,11 @@ public abstract class BaseCatBotTeleop extends BaseCatBot {
 
     // BLUE "source of truth"
     protected static final Pose[] poseArrayBlue = {
-            new Pose(24.8, 134.2, Math.toRadians(144)),   // 0 Blue Start Pose
-            new Pose(24.8, 123.8 , Math.toRadians(144)),  // 1 Blue Scoring Pose
+            new Pose(23.9, 132.56, Math.toRadians(144)),   // 0 Blue Start Pose
+            new Pose(29.4, 121.8 , Math.toRadians(144)),  // 1 Blue Scoring Pose
             new Pose(104 ,   34,    Math.toRadians(-131)),// 2 Blue Parking Pose
             new Pose(144-16,   16,    Math.toRadians(-180)),// 3 Blue Pickup Pose
-            new Pose(18,   70,    Math.toRadians(-180)) // 4 Blue Gate
+            new Pose(28,   70,    Math.toRadians(-180)) // 4 Blue Gate
     };
     protected int lifterTargetPosition = 0;
     protected static final int LIFTER_INCREMENT_TICKS = 1;
@@ -64,7 +64,7 @@ public abstract class BaseCatBotTeleop extends BaseCatBot {
     protected static final double JOYSTICK_SLEW = 1;
 
     // Lifter current limiting
-    private static final double LIFTER_BASE_POWER         = 0.2;
+    private static final double LIFTER_BASE_POWER         = 0.3;
     private static final double LIFTER_CURRENT_LIMIT_AMPS = 3.0;
     private static final double LIFTER_KP_DOWN            = 0.1;
     private static final double LIFTER_KP_UP              = 0.01;
@@ -164,6 +164,10 @@ public abstract class BaseCatBotTeleop extends BaseCatBot {
             );
         }
 
+        if (gamepad1.a) {  // move lifterTargetPosition up while going to shooting position
+            lifterTargetPosition = upperlimit;
+        }
+
         handleAutoTarget(gamepad1.aWasPressed(), gamepad1.a, AutoTarget.SCORING);
         handleAutoTarget(gamepad1.bWasPressed(), gamepad1.b, AutoTarget.PARKING);
         handleAutoTarget(gamepad1.xWasPressed(), gamepad1.x, AutoTarget.PICKUP);
@@ -208,14 +212,14 @@ public abstract class BaseCatBotTeleop extends BaseCatBot {
                 dpadDownPressed = false;
             }
 
-            if (gamepad1.dpad_right) lifterTargetPosition = lowerlimit;
-            if (gamepad1.dpad_left)  lifterTargetPosition = upperlimit;
+            if (gamepad1.dpad_down) lifterTargetPosition = lowerlimit;
+            if (gamepad1.dpad_up)  lifterTargetPosition = upperlimit;
 
-            if (gamepad1.dpad_up) {
+            if (gamepad2.dpad_left) {
                 upperlimit += LIFTER_INCREMENT_TICKS;
                 lifterTargetPosition = upperlimit;
             }
-            if (gamepad1.dpad_down) {
+            if (gamepad2.dpad_right) {
                 upperlimit -= LIFTER_INCREMENT_TICKS;
             }
             lifterTargetPosition = Math.max(lifterTargetPosition, lowerlimit);

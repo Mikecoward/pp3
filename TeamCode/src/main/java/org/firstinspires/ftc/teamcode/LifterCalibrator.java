@@ -14,7 +14,7 @@ public class LifterCalibrator {
     public static final double STALL_CURRENT_AMPS = 1.0;
     public static final double INITIAL_POWER      = -0.1;
     public static final double POWER_RAMP_PER_SEC = 0.05;
-    public static final int    BACKOFF_TICKS       = 15;
+    public static final int    BACKOFF_TICKS       = 50;
     public static final double BACKOFF_POWER       = 0.1;
 
     /**

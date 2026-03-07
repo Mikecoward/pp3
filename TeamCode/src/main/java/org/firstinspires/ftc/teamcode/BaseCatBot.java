@@ -41,7 +41,7 @@ public abstract class BaseCatBot extends OpMode {
     protected Servo        catstrength = null;
 
     // ---- Catstrength ----
-    protected static final double CATSTRENGTH_INITIAL_POSITION = 0.65;
+    protected static final double CATSTRENGTH_INITIAL_POSITION = 0.60;
     protected static final double CATSTRENGTH_MIN_POSITION     = 0.25;
     protected static final double CATSTRENGTH_MAX_POSITION     = 0.75;
     protected static final double CATSTRENGTH_INCREMENT        = 0.01;
@@ -136,9 +136,9 @@ public abstract class BaseCatBot extends OpMode {
     }
 
     // ---- Lifter position helpers ----
-    protected static final int    LIFTER_UP_POSITION  = 135;
+    protected static final int    LIFTER_UP_POSITION  = 550;
     protected static final int    LIFTER_DOWN_POSITION = 0;
-    protected static final double LIFTER_POWER         = 0.2;
+    protected static final double LIFTER_POWER         = 0.5;
 
     protected void lifterUp() {
         lifter.setTargetPosition(LIFTER_UP_POSITION);
