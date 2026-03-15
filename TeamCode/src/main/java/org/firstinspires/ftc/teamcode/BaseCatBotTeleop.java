@@ -19,8 +19,8 @@ import java.util.function.Supplier;
 public abstract class BaseCatBotTeleop extends BaseCatBot {
 
     // --- Drive ---
-    int upperlimit = 550;
     int lowerlimit = 0;
+    protected ActionScheduler scheduler = new ActionScheduler();
     protected boolean automatedDrive;
     protected AutoTarget currentAutoTarget = AutoTarget.NONE;
     boolean robotCentric = true;
@@ -30,7 +30,7 @@ public abstract class BaseCatBotTeleop extends BaseCatBot {
     // BLUE "source of truth"
     protected static final Pose[] poseArrayBlue = {
             new Pose(23.9, 132.56, Math.toRadians(144)),   // 0 Blue Start Pose
-            new Pose(29.4, 121.8 , Math.toRadians(144)),  // 1 Blue Scoring Pose
+            new Pose(29, 122 , Math.toRadians(144)),  // 1 Blue Scoring Pose
             new Pose(104 ,   34,    Math.toRadians(-131)),// 2 Blue Parking Pose
             new Pose(144-16,   16,    Math.toRadians(-180)),// 3 Blue Pickup Pose
             new Pose(28,   70,    Math.toRadians(-180)) // 4 Blue Gate
@@ -55,7 +55,7 @@ public abstract class BaseCatBotTeleop extends BaseCatBot {
     protected DriveMode driveMode = DriveMode.INTAKE;
 
     // Speed cap for all drive movements (0.0 to 1.0)
-    protected double driveSpeedCap = 0.5;
+    protected double driveSpeedCap = 0.95;
 
     // Smooth command state
     protected double cmdX = 0.0;
@@ -70,8 +70,6 @@ public abstract class BaseCatBotTeleop extends BaseCatBot {
     private static final double LIFTER_KP_UP              = 0.01;
     private double lifterPowerScale = 1.0;
 
-    protected boolean dpadUpPressed   = false;
-    protected boolean dpadDownPressed = false;
     protected boolean guidePressed    = false;
 
     // SRSHub / lidar
@@ -130,12 +128,19 @@ public abstract class BaseCatBotTeleop extends BaseCatBot {
 
     @Override
     public void start() {
+        double now = getRuntime();
         follower.startTeleopDrive();
+        catWeaker();
+        scheduler.atSec(now + 1.0, this::catapultDown);
+        scheduler.atSec(now + 1.5, this::catapultHold);
+        scheduler.atSec(now + 1.5, this::catStronger);
+
     }
 
     @Override
     public void loop() {
         follower.update();
+        scheduler.update(getRuntime());
         updatePoseFromLL();
 
         telemetry.addData("Alliance", getAlliance() == Alliance.BLUE ? "Blue" : "Red");
@@ -211,36 +216,34 @@ public abstract class BaseCatBotTeleop extends BaseCatBot {
         } else {
             intakeOff();
         }
-
         // Catstrength servo controls
         {
-            if (gamepad2.dpad_up && !dpadUpPressed) {
+            if (gamepad2.dpadUpWasPressed()) {
                 catstrengthPosition += CATSTRENGTH_INCREMENT;
                 if (catstrengthPosition > CATSTRENGTH_MAX_POSITION) catstrengthPosition = CATSTRENGTH_MAX_POSITION;
                 catstrength.setPosition(catstrengthPosition);
-                dpadUpPressed = true;
-            } else if (!gamepad2.dpad_up) {
-                dpadUpPressed = false;
+                saveCatstrength();
             }
 
-            if (gamepad2.dpad_down && !dpadDownPressed) {
+            if (gamepad2.dpadDownWasPressed()) {
                 catstrengthPosition -= CATSTRENGTH_INCREMENT;
                 if (catstrengthPosition < CATSTRENGTH_MIN_POSITION) catstrengthPosition = CATSTRENGTH_MIN_POSITION;
                 catstrength.setPosition(catstrengthPosition);
-                dpadDownPressed = true;
-            } else if (!gamepad2.dpad_down) {
-                dpadDownPressed = false;
+                saveCatstrength();
             }
 
             if (gamepad1.dpad_down) lifterTargetPosition = lowerlimit;
             if (gamepad1.dpad_up)  lifterTargetPosition = upperlimit;
 
-            if (gamepad2.dpad_left) {
+
+            if (gamepad2.dpad_right && gamepad2.left_bumper) {
                 upperlimit += LIFTER_INCREMENT_TICKS;
                 lifterTargetPosition = upperlimit;
+                saveUpperLimit();
             }
-            if (gamepad2.dpad_right) {
+            if (gamepad2.dpad_left && gamepad2.left_bumper) {
                 upperlimit -= LIFTER_INCREMENT_TICKS;
+                saveUpperLimit();
             }
             lifterTargetPosition = Math.max(lifterTargetPosition, lowerlimit);
             lifterTargetPosition = Math.min(lifterTargetPosition, upperlimit);
@@ -311,19 +314,37 @@ public abstract class BaseCatBotTeleop extends BaseCatBot {
             double headingErrDeg = Math.toDegrees(
                     AngleUnit.normalizeRadians(llPose.getHeading() - ppPose.getHeading()));
             telemetry.addData("LL-PP error", "dist=%.2f in  hdg=%.1f°", distErr, headingErrDeg);
+
+            boolean agree = distErr < 5.0 && Math.abs(headingErrDeg) < 10.0;
+            led0.setState(agree);   // red:   active-low, ON (false) when !agree
+            led1.setState(!agree);  // green: active-low, ON (false) when agree
         } else {
             telemetry.addLine("No LL Data");
+            led0.setState(true);    // red off
+            led1.setState(true);    // green off
         }
     }
 
     protected void shootCatapult() {
+        /*
         catapultUp();
+        catWeaker();
         sleep(500);
         catapultDown();
         sleep(500);
+        catStronger();
         catapultHold();
         lifterTargetPosition = 0;
         lifter.setTargetPosition(0);
+         */
+        double now = getRuntime();
+        lifterTargetPosition = 0;
+        lifter.setTargetPosition(0);
+        scheduler.atSec(now + 0.2, this::catapultUp);
+        scheduler.atSec(now + 0.2, this::catWeaker);
+        scheduler.atSec(now + 1.6, this::catapultDown);
+        scheduler.atSec(now + 2.0, this::catapultHold);
+        scheduler.atSec(now + 2.0, this::catStronger);
     }
 
 
@@ -342,5 +363,16 @@ public abstract class BaseCatBotTeleop extends BaseCatBot {
             automatedDrive = false;
             currentAutoTarget = AutoTarget.NONE;
         }
+    }
+
+    double CATSTRENGTH_DELTA = 0.10;
+
+    protected void catStronger() {
+        catstrengthPosition -= CATSTRENGTH_DELTA;
+        catstrength.setPosition(catstrengthPosition);
+    }
+    protected void catWeaker() {
+        catstrengthPosition += CATSTRENGTH_DELTA;
+        catstrength.setPosition(catstrengthPosition);
     }
 }

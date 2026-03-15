@@ -24,9 +24,9 @@ public abstract class BaseCatBotAuto extends BaseCatBot {
 
     // ---- Path / state machine ----
     protected int numPaths = 4;
-    protected double intakeChainSpeed        = 0.5;  // speed for approach/return legs
-    protected double intakeSegmentSpeed      = 0.2;  // speed while collecting (slow)
-    protected double shootVelocityThreshold  = 1.0;  // in/s — wait for robot to settle before shooting
+    protected double intakeChainSpeed        = 0.8;  // speed for approach/return legs
+    protected double intakeSegmentSpeed      = 0.5;  // speed while collecting (slow)
+    protected double shootVelocityThreshold  = 2.0;  // in/s — wait for robot to settle before shooting
     protected PathChain[] pathChains;
 
     protected ActionScheduler scheduler = new ActionScheduler();
@@ -46,9 +46,9 @@ public abstract class BaseCatBotAuto extends BaseCatBot {
     private BufferedWriter debugLog = null;
 
     // BLUE "source of truth"
-    protected static final Pose[] poseArrayBlue = {
+    /*protected static final Pose[] poseArrayBlue = {
             new Pose(23.9, 132.56, Math.toRadians(144)),   // 0 Blue Start Pose
-            new Pose(29.4, 121.8 , Math.toRadians(144)),  // 1 Blue Scoring Pose
+            new Pose(27, 124 , Math.toRadians(144)),  // 1 Blue Scoring Pose
             new Pose(40,   34,    Math.toRadians(-131)),  // 2 Blue Parking Pose
             new Pose(24,   100,    Math.toRadians(90)),    // 3 Blue intake A start
             new Pose(24,   90,    Math.toRadians(90)),    // 4 Blue intake A end
@@ -59,7 +59,23 @@ public abstract class BaseCatBotAuto extends BaseCatBot {
             new Pose(44,   105,   Math.toRadians(180)),   // 9 Unused
             new Pose(20,   70,    Math.toRadians(180)),   // 10 Gate Start
             new Pose(12,   70,    Math.toRadians(180)),   // 11 Gate End
+    };*/
+
+    protected static final Pose[] poseArrayBlue = {
+            new Pose(23.9, 132.56, Math.toRadians(144)),   // 0 Blue Start Pose
+            new Pose(29, 121 , Math.toRadians(144)),  // 1 Blue Scoring Pose
+            new Pose(40,   34,    Math.toRadians(-131)),  // 2 Blue Parking Pose
+            new Pose(45,   95,    Math.toRadians(36)),    // 3 Blue intake A start
+            new Pose(29,   82,    Math.toRadians(40)),    // 4 Blue intake A end
+            new Pose(45,   95-24,    Math.toRadians(36)),    // 5 Blue intake B start
+            new Pose(29,   82-24,    Math.toRadians(40)),    // 6 Blue intake B end
+            new Pose(45,   95-48,    Math.toRadians(36)),    // 7 Blue intake C start
+            new Pose(29,   82-48,    Math.toRadians(40)),    // 8 Blue intake C end
+            new Pose(44,   105,   Math.toRadians(180)),   // 9 Unused
+            new Pose(20,   70,    Math.toRadians(180)),   // 10 Gate Start
+            new Pose(12,   70,    Math.toRadians(180)),   // 11 Gate End
     };
+
 
     protected Pose[] poseArray;
 
@@ -155,6 +171,7 @@ public abstract class BaseCatBotAuto extends BaseCatBot {
 
         telemetry.addData("Alliance", getAlliance());
         telemetry.addData("state", state);
+        telemetry.addData("Catstrength", "%.2f", catstrengthPosition);
         PoseStorage.currentPose = follower.getPose();
 
         scheduler.update(getRuntime());
@@ -180,8 +197,8 @@ public abstract class BaseCatBotAuto extends BaseCatBot {
             case 1: // Arrived at scoring - wait for settle, then shoot
                 if (!follower.isBusy() && follower.getVelocity().getMagnitude() < shootVelocityThreshold) {
                     //shootCatapultnew();
-                    scheduler.atSec(getRuntime() + 1.5, this::shootCatapultnew);
-                    scheduler.atSec(getRuntime() + 2.5, this::setstate2);
+                    scheduler.atSec(getRuntime() + 0.5, this::shootCatapultnew);
+                    scheduler.atSec(getRuntime() + 0.75, this::setstate2);
                     state = 100;
                 }
                 break;
@@ -243,9 +260,10 @@ public abstract class BaseCatBotAuto extends BaseCatBot {
         lifterDown();
         //catapultUp();
         scheduler.atSec(now + 0.2, this::catapultUp);
-        scheduler.atSec(now + 0.8, this::catapultDown);
-        scheduler.atSec(now + 1.2, this::catapultHold);
-
+        scheduler.atSec(now + 0.2, this::catWeaker);
+        scheduler.atSec(now + 1.2, this::catapultDown);
+        scheduler.atSec(now + 1.7, this::catStronger);
+        scheduler.atSec(now + 1.7, this::catapultHold);
     }
 
     protected void shootCatapultnew() {
@@ -364,5 +382,15 @@ public abstract class BaseCatBotAuto extends BaseCatBot {
                         headingTime
                 )
                 .build();
+    }
+
+    double CATSTRENGTH_DELTA = 0.10;
+    protected void catStronger() {
+        catstrengthPosition -= CATSTRENGTH_DELTA;
+        catstrength.setPosition(catstrengthPosition);
+    }
+    protected void catWeaker() {
+        catstrengthPosition += CATSTRENGTH_DELTA;
+        catstrength.setPosition(catstrengthPosition);
     }
 }

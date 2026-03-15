@@ -8,6 +8,7 @@ import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.robotcore.hardware.DigitalChannel;
 import com.qualcomm.robotcore.hardware.Servo;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
@@ -38,7 +39,9 @@ public abstract class BaseCatBot extends OpMode {
     protected DcMotorEx    catapult1  = null;
     protected DcMotorEx    catapult2  = null;
     protected DcMotorEx    lifter     = null;
-    protected Servo        catstrength = null;
+    protected Servo          catstrength = null;
+    protected DigitalChannel led0        = null;  // red
+    protected DigitalChannel led1        = null;  // green
 
     // ---- Catstrength ----
     protected static final double CATSTRENGTH_INITIAL_POSITION = 0.60;
@@ -48,7 +51,7 @@ public abstract class BaseCatBot extends OpMode {
     protected double catstrengthPosition = CATSTRENGTH_INITIAL_POSITION;
 
     // ---- Power constants ----
-    protected double INTAKE_IN_POWER          = 1.0;
+    protected double INTAKE_IN_POWER          = 0.75;
     protected double INTAKE_OFF_POWER         =  0.0;
 
     protected double INTAKE_OUT_POWER         = -1.0;
@@ -82,11 +85,21 @@ public abstract class BaseCatBot extends OpMode {
 
         catstrength = hardwareMap.get(Servo.class, "catstrength");
         catstrengthPosition = CATSTRENGTH_INITIAL_POSITION;
+        loadCatstrength();
         catstrength.setPosition(catstrengthPosition);
 
         lifter = hardwareMap.get(DcMotorEx.class, "lifter");
         lifter.setDirection(DcMotor.Direction.REVERSE);
         lifter.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        upperlimit = LIFTER_UP_POSITION_DEFAULT;
+        loadUpperLimit();
+
+        led0 = hardwareMap.get(DigitalChannel.class, "led0");
+        led1 = hardwareMap.get(DigitalChannel.class, "led1");
+        led0.setMode(DigitalChannel.Mode.OUTPUT);
+        led1.setMode(DigitalChannel.Mode.OUTPUT);
+        led0.setState(true);    // active-low: true = off
+        led1.setState(true);
     }
 
     // ---- Limelight pose conversion ----
@@ -136,12 +149,13 @@ public abstract class BaseCatBot extends OpMode {
     }
 
     // ---- Lifter position helpers ----
-    protected static final int    LIFTER_UP_POSITION  = 550;
+    protected static final int    LIFTER_UP_POSITION_DEFAULT = 550;
     protected static final int    LIFTER_DOWN_POSITION = 0;
     protected static final double LIFTER_POWER         = 0.5;
+    protected int upperlimit = LIFTER_UP_POSITION_DEFAULT;
 
     protected void lifterUp() {
-        lifter.setTargetPosition(LIFTER_UP_POSITION);
+        lifter.setTargetPosition(upperlimit);
         lifter.setMode(DcMotor.RunMode.RUN_TO_POSITION);
         lifter.setPower(LIFTER_POWER);
     }
@@ -150,6 +164,44 @@ public abstract class BaseCatBot extends OpMode {
         lifter.setTargetPosition(LIFTER_DOWN_POSITION);
         lifter.setMode(DcMotor.RunMode.RUN_TO_POSITION);
         lifter.setPower(LIFTER_POWER);
+    }
+
+    // ---- Upperlimit persistence ----
+    private static final String UPPERLIMIT_FILE = "/sdcard/FIRST/upperlimit.txt";
+
+    protected void saveUpperLimit() {
+        try (java.io.FileWriter fw = new java.io.FileWriter(UPPERLIMIT_FILE)) {
+            fw.write(String.valueOf(upperlimit));
+        } catch (java.io.IOException ignored) {}
+    }
+
+    private void loadUpperLimit() {
+        try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(UPPERLIMIT_FILE))) {
+            String line = br.readLine();
+            if (line != null) {
+                upperlimit = Integer.parseInt(line.trim());
+            }
+        } catch (Exception ignored) {} // file missing or corrupt — keep default
+    }
+
+    // ---- Catstrength persistence ----
+    private static final String CATSTRENGTH_FILE = "/sdcard/FIRST/catstrength.txt";
+
+    protected void saveCatstrength() {
+        try (java.io.FileWriter fw = new java.io.FileWriter(CATSTRENGTH_FILE)) {
+            fw.write(String.valueOf(catstrengthPosition));
+        } catch (java.io.IOException ignored) {}
+    }
+
+    private void loadCatstrength() {
+        try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(CATSTRENGTH_FILE))) {
+            String line = br.readLine();
+            if (line != null) {
+                double saved = Double.parseDouble(line.trim());
+                catstrengthPosition = Math.max(CATSTRENGTH_MIN_POSITION,
+                                       Math.min(CATSTRENGTH_MAX_POSITION, saved));
+            }
+        } catch (Exception ignored) {} // file missing or corrupt — keep default
     }
 
     // ---- Utility ----
